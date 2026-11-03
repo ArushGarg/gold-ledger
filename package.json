@@ -1,0 +1,6 @@
+{
+  "name": "gold-ledger",
+  "version": "1.0.0",
+  "scripts": { "start": "node server/index.js", "test": "node --test" },
+  "dependencies": { "bcryptjs": "^2.4.3", "express": "^4.19.2", "jsonwebtoken": "^9.0.2" }
+}

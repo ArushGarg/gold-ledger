@@ -1,0 +1,57 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Gold Ledger</title>
+<style>
+:root{--ink:#14201c;--bg:#faf8f3;--card:#fff;--gold:#b8892f;--line:#e8e2d4;--red:#a32d2d;--grn:#1f6b4f}
+@media(prefers-color-scheme:dark){:root{--bg:#101815;--card:#18231f;--ink:#f3efe4;--line:#2a3a34}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#14201c;color:#f3efe4;padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+header b{letter-spacing:.08em;color:var(--gold)}nav{display:flex;gap:4px;padding:10px 16px;overflow-x:auto}
+nav button{border:0;background:none;padding:8px 14px;border-radius:20px;color:inherit;cursor:pointer}
+nav button.on{background:var(--ink);color:var(--bg)}main{max-width:880px;margin:0 auto;padding:8px 16px 40px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:12px 0}
+.num{font:600 28px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right}
+.big{font-size:34px;color:var(--gold)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:12px 0 4px;opacity:.7}
+input,select{width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:inherit;font-size:16px}
+.btn{background:var(--ink);color:var(--bg);border:0;padding:12px 20px;border-radius:10px;font-size:15px;cursor:pointer;margin-top:14px}
+.btn:disabled{opacity:.4}.err{color:var(--red);margin-top:8px}.ok{color:var(--grn)}
+.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+.empty{opacity:.55;text-align:center;padding:24px}img.ph{height:64px;border-radius:8px;margin-top:8px}
+</style></head><body>
+<header><b>GOLD LEDGER</b><span id="who"></span></header><nav id="nav"></nav><main id="app"></main>
+<script>
+let T=localStorage.t,R=localStorage.r,E='';const $=s=>document.querySelector(s),app=$('#app');
+const api=async(p,o={})=>{const r=await fetch('/api/'+p,{...o,headers:{'content-type':'application/json',authorization:'Bearer '+T},body:o.body&&JSON.stringify(o.body)});
+ if(r.status===401){localStorage.clear();T=null;return render('login')}const d=await r.json();if(!r.ok)throw new Error(d.error);return d};
+const g=mg=>mg;const tabs={dashboard:'Today',karigars:'Karigars',issue:'Issue',receipt:'Receipt'};
+function nav(cur){$('#nav').innerHTML=T?Object.entries(tabs).map(([k,v])=>`<button class="${k==cur?'on':''}" onclick="render('${k}')">${v}</button>`).join(''):'';$('#who').textContent=T?R+' · ':'';}
+async function render(v){nav(v);app.innerHTML='<div class="empty">Loading…</div>';try{await views[v||'dashboard']()}catch(e){app.innerHTML=`<div class="card err">${e.message}</div>`}}
+const views={
+login(){app.innerHTML=`<div class="card"><h2>Sign in</h2><label>Email</label><input id=e value="clerk@demo.com"><label>Password</label><input id=p type=password value="demo1234"><button class=btn id=go>Sign in</button><div class=err id=m></div></div>`;
+ $('#go').onclick=async()=>{try{const d=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:$('#e').value,password:$('#p').value})}).then(async r=>{const j=await r.json();if(!r.ok)throw Error(j.error);return j});
+  T=localStorage.t=d.token;R=localStorage.r=d.role;render('dashboard')}catch(e){$('#m').textContent=e.message}}},
+async dashboard(){if(R!=='finance'){app.innerHTML='<div class="card">Stock statement and alerts are visible to the finance head only.</div>';return}
+ const[s,a]=await Promise.all([api('stock'),api('alerts')]);
+ app.innerHTML=`<div class=grid>${[['In vault',s.vault],['With karigars',s.withKarigars],['At refiner',s.refiner]].map(([l,v])=>`<div class=card><label>${l} (fine g)</label><div class="num big">${v}</div></div>`).join('')}</div>
+ <button class=btn onclick="dl()">Export to Tally (CSV)</button>
+ <h3>Items to review</h3>${a.length?a.map(x=>`<div class=card><b>${x.karigar}</b><br>${x.text}</div>`).join(''):'<div class=empty>Nothing to review today.</div>'}`},
+async karigars(){const k=await api('karigars');app.innerHTML=k.map(x=>`<div class=card><div class=row style="border:0"><b>${x.name}</b><span class=num>${(x.balance/1000).toFixed(3)} g</span></div>
+ ${x.jobs.map(j=>`<div class=row><span>${j.job}${j.closed?' ✓':''}</span><span>${(j.outstanding/1000).toFixed(3)} / allowed ${(j.allowed/1000).toFixed(3)}</span></div>`).join('')||'<div class=empty>No jobs yet</div>'}</div>`).join('')},
+async issue(){await form('issue')},async receipt(){await form('receipt')}};
+async function form(type){const ks=await api('karigars');
+ app.innerHTML=`<div class=card><h2>${type=='issue'?'Issue gold':'Receive from karigar'}</h2>
+ <label>Karigar</label><select id=k>${ks.map(k=>`<option value=${k.id}>${k.name}</option>`).join('')}</select>
+ <label>Job number</label><input id=job placeholder="J-1002">
+ ${type=='issue'?'<label>Category</label><select id=cat><option>necklace<option>ring<option>bangle</select>':'<label>Type</label><select id=kind><option value=finished>Finished piece<option value=scrap>Scrap<option value=filings>Filings</select><label><input type=checkbox id=fin style="width:auto"> Closes this job</label>'}
+ <label>Gross weight (g)</label><input id=gross inputmode=decimal placeholder="0.000"><input type=file id=img accept="image/*" capture=environment><div id=aiGross></div>
+ <label>Purity (%)</label><input id=pur inputmode=decimal placeholder="91.60">
+ <button class=btn id=save>Save</button><div id=m></div></div>`;
+ let ai=null;$('#img').onchange=async e=>{const f=e.target.files[0];if(!f)return;const b=await new Promise(r=>{const x=new FileReader;x.onload=()=>r(x.result);x.readAsDataURL(f)});
+  const d=await api('read-scale',{method:'POST',body:{image:b.split(',')[1]}});ai=d.weight;
+  $('#aiGross').innerHTML=`<img class=ph src="${b}"> <b>Reader says: ${d.weight||'unsure, please type'}</b>`;if(d.weight)$('#gross').value=d.weight};
+ $('#save').onclick=async()=>{try{const body={karigarId:+$('#k').value,job:$('#job').value,gross:$('#gross').value,purity:$('#pur').value,aiGross:ai,
+  category:$('#cat')?.value,kind:$('#kind')?.value,final:$('#fin')?.checked};const d=await api(type,{method:'POST',body});
+  $('#m').innerHTML=`<div class=ok>Saved ${d.id}. Fine gold: <span class=num>${d.fine} g</span></div>`}catch(e){$('#m').innerHTML=`<div class=err>${e.message}</div>`}}}
+async function dl(){const r=await fetch('/api/stock.csv',{headers:{authorization:'Bearer '+T}});const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download='tally-export.csv';a.click()}
+T?render('dashboard'):render('login');
+</script></body></html>
