@@ -124,8 +124,8 @@ app.get('/api/alerts', auth('finance'), (req, res) => {
   res.json(out);
 });
 
-// Every gram accounted for: vault + with karigars + finished + allowance used + beyond allowance = opening.
-// ASSUMPTION: finished pieces leave to showroom stock; scrap and filings return to the vault.
+// Every gram accounted for: vault + with karigars + finished + allowance used + beyond allowance = opening + old gold bought.
+// ASSUMPTION: finished pieces leave to showroom stock; scrap, filings and old gold bought go into the vault.
 function stock() {
   const sum = (w) => db.prepare(`SELECT COALESCE(SUM(fine_mg),0) s FROM txns WHERE ${w}`).get().s;
   const issued = sum("type='issue'"), finished = sum("category='finished'"), back = sum("category IN ('scrap','filings')");
@@ -135,8 +135,9 @@ function stock() {
       if (j.closed) { allowance += Math.min(j.outstanding, j.allowed); beyond += Math.max(0, j.outstanding - j.allowed); }
       else withK += j.outstanding;
     }
-  const vault = OPENING_MG - issued + back;
-  return { vault, withK, finished, allowance, beyond, refiner: 0, reconciled: vault + withK + finished + allowance + beyond === OPENING_MG };
+  const old = db.prepare('SELECT COALESCE(SUM(fine_mg),0) s FROM old_gold').get().s; // old gold bought goes into the vault
+  const vault = OPENING_MG - issued + back + old;
+  return { vault, withK, finished, allowance, beyond, refiner: 0, reconciled: vault + withK + finished + allowance + beyond === OPENING_MG + old };
 }
 app.get('/api/stock', auth('finance'), (req, res) => {
   const s = stock();
@@ -170,8 +171,11 @@ app.post('/api/read-scale', auth('clerk', 'finance'), async (req, res) => {
   } catch { res.json({ weight: null, note: 'Could not read the photo' }); }
 });
 
+require('./oldgold').register(app, db, auth);
+
 module.exports = { app, db };
 if (require.main === module) {
   require('./seed')(db, bcrypt);
+  require('./oldgold').seed(db);
   app.listen(process.env.PORT || 3000, () => console.log('Running on http://localhost:' + (process.env.PORT || 3000)));
 }
