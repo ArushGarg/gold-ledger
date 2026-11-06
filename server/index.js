@@ -19,8 +19,14 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT DEFAULT CURRENT_TIMESTAMP, email TEXT, 
 `);
 
 const app = express();
+app.set('trust proxy', 1); // behind the host's proxy, so req.ip is the real visitor
+app.use((req, res, next) => {
+  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer' });
+  next();
+});
 app.use(express.json({ limit: '6mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
+app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 const auth = (...roles) => (req, res, next) => {
   try {

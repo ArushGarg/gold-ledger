@@ -1,6 +1,7 @@
 {
   "name": "gold-ledger",
-  "version": "1.1.0",
+  "version": "1.2.0",
+  "engines": { "node": ">=22.13" },
   "scripts": {
     "start": "node --env-file-if-exists=.env server/index.js",
     "test": "node --test"
