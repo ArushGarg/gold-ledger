@@ -57,7 +57,8 @@ function register(app, db, auth) {
     }
   });
 
-  app.get('/api/oldgold', auth(), (req, res) => {
+  // Clerk and finance only: purchases carry customer names and masked PANs.
+  app.get('/api/oldgold', roles, (req, res) => {
     res.json(db.prepare('SELECT * FROM old_gold ORDER BY rowid DESC LIMIT 20').all().map((r) => ({
       id: r.id, bill: r.bill_no, customer: r.customer, gross: F.fmt(r.gross_mg), purity: (r.purity_bp / 100).toFixed(2),
       fine: F.fmt(r.fine_mg), value: rupees(r.value_paise), mode: r.mode, pan: r.pan ? 'XXXXXX' + r.pan.slice(-4) : '' })));

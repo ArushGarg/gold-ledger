@@ -55,7 +55,8 @@ function jobs(kid) {
   return Object.values(m).map((j) => ({ ...j, ...F.jobLoss(j) }));
 }
 
-app.get('/api/karigars', auth(), (req, res) => {
+// Clerk and finance only. Karigars use /api/me/slips and see just their own data.
+app.get('/api/karigars', auth('clerk', 'finance'), (req, res) => {
   res.json(db.prepare('SELECT * FROM karigars').all().map((k) => {
     const js = jobs(k.id);
     return { ...k, wastage: db.prepare('SELECT category, bp FROM wastage WHERE karigar_id=?').all(k.id),
@@ -106,7 +107,7 @@ function record(type) {
 app.post('/api/issue', auth('clerk', 'finance'), record('issue'));
 app.post('/api/receipt', auth('clerk', 'finance'), record('receipt'));
 
-app.get('/api/recent', auth(), (req, res) => {
+app.get('/api/recent', auth('clerk', 'finance'), (req, res) => {
   res.json(db.prepare(`SELECT t.id, k.name, t.job, t.type, t.category, t.gross_mg, t.purity_bp, t.fine_mg
     FROM txns t JOIN karigars k ON k.id=t.karigar_id ORDER BY t.rowid DESC LIMIT 8`).all()
     .map((r) => ({ ...r, gross: F.fmt(r.gross_mg), purity: (r.purity_bp / 100).toFixed(2), fine: F.fmt(r.fine_mg) })));
@@ -172,10 +173,12 @@ app.post('/api/read-scale', auth('clerk', 'finance'), async (req, res) => {
 });
 
 require('./oldgold').register(app, db, auth);
+require('./karigar').register(app, db, auth, jobs);
 
 module.exports = { app, db };
 if (require.main === module) {
   require('./seed')(db, bcrypt);
   require('./oldgold').seed(db);
+  require('./karigar').seed(db, bcrypt);
   app.listen(process.env.PORT || 3000, () => console.log('Running on http://localhost:' + (process.env.PORT || 3000)));
 }
