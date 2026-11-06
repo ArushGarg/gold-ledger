@@ -1,6 +1,6 @@
 # Deployment
 
-Live app: _paste the Render URL here_
+Live app: https://gold-ledger-xkhc.onrender.com/
 Repository: https://github.com/ArushGarg/gold-ledger
 
 ## Run locally

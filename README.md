@@ -4,7 +4,7 @@ A fine-gold ledger for a jewellery workshop. It records gold issued to karigars 
 
 Built for the Company A (Coimbatore) brief: 5 showrooms, about 40 karigars, and roughly ₹1.25 crore a year lost to unexplained gold loss and manual month-end reconciliation.
 
-**Live app:** _add link after deployment_
+**Live app:** https://gold-ledger-xkhc.onrender.com/
 
 ## What it does
 
