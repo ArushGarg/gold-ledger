@@ -1,0 +1,45 @@
+<!doctype html><html lang="ta"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Gold Ledger · கரிகர்</title>
+<style>
+:root{--bg:#f7f5ef;--ink:#14201c;--card:#fff;--gold:#8a6317;--line:#e5dfcf;--red:#a32d2d;--mute:#6b6f68}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1714;--ink:#f3efe4;--card:#17221e;--gold:#d4a64a;--line:#2a3a34;--red:#e07a7a;--mute:#9aa59f}}
+*{box-sizing:border-box}body{margin:0;font:17px/1.6 "Nirmala UI","Noto Sans Tamil",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#14201c;color:#f3efe4;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
+header b{color:#d4a64a;letter-spacing:.1em}header button{background:none;border:1px solid #d4a64a;color:#d4a64a;border-radius:14px;padding:4px 12px;margin-left:8px;font-size:14px}
+main{max-width:520px;margin:0 auto;padding:12px 14px 40px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin:12px 0}
+.num{font-family:ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.big{font-size:44px;font-weight:600;color:var(--gold);line-height:1.1}.unit{font-size:.4em;color:var(--mute);margin-left:4px}
+.mute{color:var(--mute);font-size:14px}.row{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}
+label{display:block;font-size:14px;color:var(--mute);margin:12px 0 4px}input{width:100%;padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:inherit;font-size:17px}
+.btn{width:100%;background:var(--ink);color:var(--bg);border:0;padding:14px;border-radius:12px;font-size:17px;margin-top:16px}.err{color:var(--red);margin-top:10px}
+.chip{font-size:13px;padding:2px 10px;border-radius:12px;border:1px solid var(--line);color:var(--mute)}h3{margin:20px 0 4px}
+</style></head><body>
+<header><b>GOLD LEDGER</b><span><button id=lang></button><button id=out hidden></button></span></header><main id=app></main>
+<script>
+const S={ta:{title:'கரிகர் உள்நுழைவு',email:'மின்னஞ்சல்',pw:'கடவுச்சொல்',in:'உள்நுழை',out:'வெளியேறு',bal:'என்னிடம் உள்ள தங்கம் (சுத்தம்)',jobs:'திறந்த பணிகள்',allowed:'அனுமதிக்கப்பட்ட இழப்பு',slips:'சீட்டுகள்',
+ none:'திறந்த பணிகள் இல்லை',noslips:'சீட்டுகள் இல்லை',load:'ஏற்றுகிறது…',retry:'மீண்டும் முயற்சி',gross:'மொத்த எடை',purity:'தூய்மை',fine:'சுத்த தங்கம்',job:'பணி',
+ issue:'வழங்கப்பட்டது',receipt:'திரும்பப் பெற்றது',finished:'முடிந்த நகை',scrap:'கழிவு',filings:'தூள்',only:'இந்தப் பக்கம் கரிகர்களுக்கு மட்டும்',wrong:'மின்னஞ்சல் அல்லது கடவுச்சொல் தவறு'},
+ en:{title:'Karigar sign in',email:'Email',pw:'Password',in:'Sign in',out:'Log out',bal:'Gold with me (fine)',jobs:'Open jobs',allowed:'Allowed wastage',slips:'Slips',
+ none:'No open jobs',noslips:'No slips yet',load:'Loading…',retry:'Try again',gross:'Gross',purity:'Purity',fine:'Fine gold',job:'Job',
+ issue:'Issued',receipt:'Received back',finished:'Finished piece',scrap:'Scrap',filings:'Filings',only:'This page is for karigars only',wrong:'Wrong email or password'}};
+let L=localStorage.lang||'ta',K=localStorage.kt;const t=k=>S[L][k]||k,$=s=>document.querySelector(s),app=$('#app');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const g=v=>`<span class=num>${v}<span class=unit>g</span></span>`;
+$('#lang').onclick=()=>{L=L=='ta'?'en':'ta';localStorage.lang=L;boot()};$('#out').onclick=()=>{localStorage.removeItem('kt');K=null;boot()};
+async function api(p,b){const r=await fetch('/api/'+p,{method:b?'POST':'GET',headers:{'content-type':'application/json',authorization:'Bearer '+K},body:b&&JSON.stringify(b)});
+ const d=await r.json().catch(()=>({}));if(r.status===401&&p!=='login'){localStorage.removeItem('kt');K=null;return boot()}if(!r.ok)throw new Error(d.error||'Error');return d}
+function login(){app.innerHTML=`<div class=card><h2 style="margin-top:0">${t('title')}</h2><label>${t('email')}</label><input id=e value="karigar1@demo.com" inputmode=email>
+ <label>${t('pw')}</label><input id=p type=password value="demo1234"><button class=btn id=go>${t('in')}</button><div class=err id=m></div></div>`;
+ $('#go').onclick=async()=>{try{const d=await api('login',{email:$('#e').value,password:$('#p').value});
+  if(d.role!=='karigar'){$('#m').textContent=t('only');return}K=localStorage.kt=d.token;boot()}catch(e){$('#m').textContent=t('wrong')}}}
+async function home(){app.innerHTML=`<div class="card mute">${t('load')}</div>`;
+ try{const d=await api('me/slips'),open=d.jobs.filter(j=>!j.closed);
+ app.innerHTML=`<div class=card><div class=mute>${esc(d.name)}</div><div class=mute>${t('bal')}</div><div class=big>${g(d.balance)}</div></div>
+ <h3>${t('jobs')}</h3><div class=card>${open.map(j=>`<div class=row><span>${esc(j.job)}</span><span style="text-align:right">${g(j.balance)}<div class=mute>${t('allowed')}: ${j.allowed} g</div></span></div>`).join('')||`<div class=mute>${t('none')}</div>`}</div>
+ <h3>${t('slips')}</h3>${d.slips.map(s=>`<div class=card><div class=row style="padding-top:0"><b>${esc(s.id)} · ${esc(s.job)}</b><span class=chip>${t(s.type)}${s.type=='receipt'?' · '+t(s.category):''}</span></div>
+ <div class=row><span class=mute>${t('gross')}</span>${g(s.gross)}</div><div class=row><span class=mute>${t('purity')}</span><span class=num>${s.purity}%</span></div>
+ <div class=row><span class=mute>${t('fine')}</span><b>${g(s.fine)}</b></div><div class=mute>${s.at}</div></div>`).join('')||`<div class="card mute">${t('noslips')}</div>`}`}
+ catch(e){app.innerHTML=`<div class="card err">${esc(e.message)}<button class=btn id=r>${t('retry')}</button></div>`;$('#r').onclick=home}}
+function boot(){document.documentElement.lang=L;$('#lang').textContent=L=='ta'?'English':'தமிழ்';$('#out').textContent=t('out');$('#out').hidden=!K;K?home():login()}
+boot();
+</script></body></html>
