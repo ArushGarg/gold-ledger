@@ -65,12 +65,15 @@ function register(app, db, auth) {
   });
 }
 
+// Seed rows must obey the same rules as live entries, or the app contradicts its own demo data.
 function seed(db) {
   if (db.prepare('SELECT COUNT(*) c FROM old_gold').get().c) return;
   const ins = db.prepare('INSERT INTO old_gold(id,bill_no,customer,gross_mg,deduction_mg,purity_bp,fine_mg,rate_paise,value_paise,mode,pan,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
-  [['EX-1001', 'Demo Customer A', '25.000', '0.500', '91.60', 'cash', null],
+  [['EX-1001', 'Demo Customer A', '3.000', '0.100', '91.60', 'cash', null],       // small cash purchase, under the PAN limit
    ['EX-1002', 'Demo Customer B', '60.000', '1.200', '91.60', 'bank', 'ABCDE1234F']].forEach(([bill, cust, g, d, p, mode, pan], i) => {
     const c = compute({ gross: g, deduction: d, purity: p, rate: '12500' });
+    const k = compliance(c.valuePaise, mode, pan);
+    if (k.error) throw new Error('Seed data breaks its own rule: ' + k.error);
     ins.run('OG-' + (50001 + i), bill, cust, c.grossMg, c.deductionMg, c.purityBp, c.fineMg, c.ratePaise, c.valuePaise, mode, pan, 'clerk@demo.com');
   });
 }

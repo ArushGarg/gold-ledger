@@ -18,8 +18,8 @@ window.extraViews = {
     <div id=panBox hidden><label>Customer PAN (required for high-value purchases)</label><input id=pan maxlength=10 placeholder="ABCDE1234F" style="text-transform:uppercase"></div>
     <div id=pv class=card style="margin-top:16px"><div class=empty>Enter weight and purity to see fine gold and value.</div></div>
     <button class=btn id=ogSave>Record purchase</button><div id=ogErr></div></div>
-    <h3>Recent purchases</h3>${rows.length ? `<div class=card style="overflow-x:auto"><table><tr><th>ID</th><th>Bill</th><th>Customer</th><th class=num>Fine g</th><th class=num>Value ₹</th><th>Paid by</th><th>PAN</th></tr>
-    ${rows.map(r => `<tr><td>${esc(r.id)}</td><td>${esc(r.bill)}</td><td>${esc(r.customer)}</td><td class=num><b>${r.fine}</b></td><td class=num>${r.value}</td><td>${esc(r.mode)}</td><td>${esc(r.pan) || '-'}</td></tr>`).join('')}</table></div>` : '<div class=empty>No purchases yet.</div>'}`;
+    <h3>Recent purchases</h3>${rows.length ? `<div class=card style="overflow-x:auto"><table><tr><th>ID</th><th>Bill</th><th>Customer</th><th class=num>Fine g</th><th class=num>Value ₹</th><th style="padding-left:20px">Paid by</th><th>PAN</th></tr>
+    ${rows.map(r => `<tr><td>${esc(r.id)}</td><td>${esc(r.bill)}</td><td>${esc(r.customer)}</td><td class=num><b>${r.fine}</b></td><td class=num>${r.value}</td><td style="padding-left:20px;text-transform:capitalize">${esc(r.mode)}</td><td>${esc(r.pan) || '-'}</td></tr>`).join('')}</table></div>` : '<div class=empty>No purchases yet.</div>'}`;
     const f = (id) => $('#' + id).value.trim();
     const body = () => ({ gross: f('og'), deduction: f('od') || '0', purity: f('op'), rate: f('or'), mode: f('om'), pan: f('pan').toUpperCase() });
     let t;
