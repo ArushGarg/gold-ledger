@@ -19,9 +19,10 @@ input[type=checkbox]{width:auto;margin-right:8px}
 .btn{background:var(--ink);color:var(--bg);border:0;padding:12px 22px;border-radius:10px;font-size:15px;cursor:pointer;margin-top:16px}
 .btn.ghost{background:none;color:var(--ink);border:1px dashed var(--mute);display:inline-block;margin-top:10px;padding:9px 16px}
 .btn:disabled{opacity:.45;cursor:wait}.err{color:var(--red);margin-top:10px}.ok{color:var(--grn);margin-top:10px}
-.row{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);align-items:center}
+.row{display:grid;grid-template-columns:1fr auto auto;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);align-items:center}
 .row:last-child{border:0}.chip{font-size:12px;padding:2px 10px;border-radius:12px;border:1px solid var(--line);color:var(--mute)}
 .chip.warn{color:var(--red);border-color:var(--red)}.chip.good{color:var(--grn);border-color:var(--grn)}
+.lbl{color:var(--mute);font-size:13px;margin-right:6px}
 .empty{color:var(--mute);text-align:center;padding:22px}img.ph{height:70px;border-radius:8px;vertical-align:middle;margin-right:10px}
 h2,h3{margin:18px 0 6px}.flex{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 table{width:100%;border-collapse:collapse}td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}th{color:var(--mute);font-weight:500}td.num,th.num{text-align:right}
@@ -29,7 +30,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:7px 4px;border-bottom:1p
 <header><b>GOLD LEDGER</b><span id="who"></span></header><nav id="nav"></nav><main id="app"></main>
 <script src="oldgold.js"></script>
 <script>
-let T=localStorage.t,R=localStorage.r,flash='';
+let T=localStorage.t,R=localStorage.r,flash='',keep=null;
 const $=s=>document.querySelector(s),app=$('#app');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const g=mg=>(mg/1000).toFixed(3);
@@ -78,23 +79,27 @@ async karigars(){
   <div>${x.wastage.map(w=>`<span class=chip>${esc(w.category)} ${(w.bp/100).toFixed(2)}%</span> `).join('')}</div>
   <label>Jobs (fine gold)</label>
   ${x.jobs.map(j=>{const over=j.closed&&j.excess>0;return`<div class=row><span>${esc(j.job)} <span class="chip ${over?'warn':j.closed?'good':''}">${over?'over allowance':j.closed?'closed':'open'}</span></span>
-  ${wt(g(j.outstanding))}<span class=num style="color:var(--mute)">allowed ${g(j.allowed)}</span></div>`}).join('')||'<div class=empty>No jobs yet</div>'}</div>`).join('')},
+  <span><span class=lbl>${j.closed?'loss':'balance'}</span>${wt(g(j.outstanding))}</span><span class=num style="color:var(--mute)">allowed ${g(j.allowed)}</span></div>`}).join('')||'<div class=empty>No jobs yet</div>'}</div>`).join('')},
 async issue(){await form('issue')},async receipt(){await form('receipt')}};
 async function form(type){
   const ks=await api('karigars');let ai=null;const msg=flash;flash='';
   app.innerHTML=`<div class=card><h2 style="margin-top:0">${type=='issue'?'Issue gold to karigar':'Receive from karigar'}</h2>${msg}
   <label>Karigar</label><select id=k>${ks.map(k=>`<option value=${k.id}>${esc(k.name)}</option>`).join('')}</select>
-  <label>Job number</label>${type=='issue'?'<input id=job placeholder="J-3001" maxlength=20>':'<select id=job></select>'}
+  <label>Job number</label>${type=='issue'?'<input id=job placeholder="J-3001" maxlength=20 autocomplete="off">':'<select id=job></select>'}
   ${type=='issue'?`<label>Item category</label><select id=cat></select>`:`<label>Receipt type</label><select id=kind><option value=finished>Finished piece</option><option value=scrap>Scrap</option><option value=filings>Filings</option></select>
   <label><input type=checkbox id=fin>This receipt closes the job</label>`}
-  <label>Gross weight (g)</label><input id=gross inputmode=decimal placeholder="0.000">
+  <label>Gross weight (g)</label><input id=gross inputmode=decimal placeholder="0.000" autocomplete="off">
   <label class="btn ghost" for=img>Read from scale photo</label><input id=img type=file accept="image/*" capture=environment hidden><div id=aiBox></div>
-  <label>Purity (%)</label><input id=pur inputmode=decimal placeholder="91.60">
+  <label>Purity (%)</label><input id=pur inputmode=decimal placeholder="91.60" autocomplete="off">
   <button class=btn id=save>Save entry</button><div id=m></div></div>`;
   const sync=()=>{const k=ks.find(x=>x.id==$('#k').value);
     if(type=='issue')$('#cat').innerHTML=k.wastage.map(w=>`<option value=${esc(w.category)}>${esc(w.category)} (${(w.bp/100).toFixed(2)}% allowed)</option>`).join('');
     else $('#job').innerHTML=k.jobs.filter(j=>!j.closed).map(j=>`<option>${esc(j.job)}</option>`).join('')||'<option value="">No open jobs</option>'};
-  $('#k').onchange=sync;sync();
+  $('#k').onchange=sync;
+  // Keep the karigar (and job, for receipts) selected after a save, so the next entry cannot land on the wrong job.
+  if(keep&&keep.type===type)$('#k').value=keep.k;
+  sync();
+  if(keep&&keep.type===type&&type=='receipt'&&[...$('#job').options].some(o=>o.value===keep.job))$('#job').value=keep.job;
   $('#img').onchange=async e=>{const f=e.target.files[0];if(!f)return;ai=null;
     const b=await new Promise(r=>{const x=new FileReader;x.onload=()=>r(x.result);x.readAsDataURL(f)});
     $('#aiBox').innerHTML='<div class=empty>Reading photo…</div>';
@@ -104,6 +109,7 @@ async function form(type){
   $('#save').onclick=async()=>{const b=$('#save');b.disabled=true;
     try{const d=await api(type,{method:'POST',body:{karigarId:+$('#k').value,job:$('#job').value,gross:$('#gross').value,purity:$('#pur').value,aiGross:ai,
       category:$('#cat')?.value,kind:$('#kind')?.value,final:$('#fin')?.checked}});
+      keep={type,k:$('#k').value,job:$('#job').value};
       flash=`<div class=ok>Saved ${esc(d.id)}. Fine gold ${wt(d.fine,'big')} · job balance ${d.job.outstanding} g · allowed ${d.job.allowed} g${d.job.closed?' · job closed':''}</div>`;
       form(type)}
     catch(e){$('#m').innerHTML=`<div class=err>${esc(e.message)}</div>`;b.disabled=false}}}
