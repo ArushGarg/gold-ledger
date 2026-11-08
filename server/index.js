@@ -101,6 +101,11 @@ function record(type) {
       if (type === 'issue') {
         const s = stock();
         if (fine > s.vault) throw new Error('Not enough gold in vault');
+      } else {
+        // ASSUMPTION: a karigar cannot return more fine gold than was issued for the job.
+        const cur = jobs(k.id).find((x) => x.job === b.job);
+        if (fine > cur.outstanding)
+          throw new Error(`This would return more fine gold than was issued for this job (balance ${F.fmt(cur.outstanding)} g). Check the weight and purity.`);
       }
       db.prepare('INSERT INTO txns(id,karigar_id,job,type,category,gross_mg,purity_bp,fine_mg,final) VALUES(?,?,?,?,?,?,?,?,?)')
         .run(id, k.id, b.job, type, cat, g, p, fine, b.final ? 1 : 0);
