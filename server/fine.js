@@ -25,4 +25,10 @@ const drifting = (lossPcts) => {
   const avg = prior.reduce((a, b) => a + b, 0) / prior.length;
   return last > avg * 1.5 && last > 0.002;
 };
-module.exports = { toMg, toBp, fineMg, allowedMg, fmt, jobLoss, drifting };
+
+// Dates shown to users are Indian Standard Time (UTC+5:30). The database stores UTC.
+const IST_MS = 19800000;
+const istDate = (sqlTs) => new Date(Date.parse(String(sqlTs).replace(' ', 'T') + 'Z') + IST_MS).toISOString().slice(0, 10);
+const todayIst = () => new Date(Date.now() + IST_MS).toISOString().slice(0, 10);
+
+module.exports = { toMg, toBp, fineMg, allowedMg, fmt, jobLoss, drifting, istDate, todayIst };
