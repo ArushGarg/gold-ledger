@@ -5,7 +5,7 @@ window.extraViews = {
   async master() {
     const ks = await api('karigars'), fin = R === 'finance', note = window.masterNote || '';
     window.masterNote = '';
-    app.innerHTML = `${note}
+    app.innerHTML = `<div id=mNote>${note}</div>
     ${fin ? `<div class=card><h2 style="margin-top:0">Set agreed wastage</h2>
       <label>Karigar</label><select id=mk>${ks.map(k => `<option value=${k.id}>${esc(k.name)}</option>`).join('')}</select>
       <div class=grid>
@@ -20,8 +20,10 @@ window.extraViews = {
     <h3>Agreed wastage per karigar</h3>
     ${ks.map(k => `<div class=card><b>${esc(k.name)}</b><div style="margin-top:8px">${k.wastage.map(w => `<span class=chip>${esc(w.category)} ${(w.bp / 100).toFixed(2)}%</span> `).join('') || '<span class=empty>No categories set yet</span>'}</div></div>`).join('')}`;
     if (!fin) return;
+    const clear = () => { $('#mNote').innerHTML = ''; $('#mErr').innerHTML = ''; $('#mErr2').innerHTML = ''; };
     const done = (msg) => { window.masterNote = `<div class=ok>${esc(msg)}</div>`; render('master'); };
     $('#mSave').onclick = async () => {
+      clear();
       const b = $('#mSave'); b.disabled = true;
       try {
         const d = await api(`karigars/${$('#mk').value}/wastage`, { method: 'PUT', body: { category: $('#mc').value, percent: $('#mp').value.trim() } });
@@ -29,6 +31,7 @@ window.extraViews = {
       } catch (e) { $('#mErr').innerHTML = `<div class=err>${esc(e.message)}</div>`; b.disabled = false; }
     };
     $('#mAdd').onclick = async () => {
+      clear();
       const b = $('#mAdd'); b.disabled = true;
       try { const d = await api('karigars', { method: 'POST', body: { name: $('#mn').value } }); done(`Added ${d.name}. Set a wastage % for each category before issuing gold.`); }
       catch (e) { $('#mErr2').innerHTML = `<div class=err>${esc(e.message)}</div>`; b.disabled = false; }
