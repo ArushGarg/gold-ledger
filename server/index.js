@@ -14,9 +14,10 @@ CREATE TABLE IF NOT EXISTS users(email TEXT PRIMARY KEY, hash TEXT, role TEXT);
 CREATE TABLE IF NOT EXISTS karigars(id INTEGER PRIMARY KEY, name TEXT);
 CREATE TABLE IF NOT EXISTS wastage(karigar_id INT, category TEXT, bp INT, PRIMARY KEY(karigar_id, category));
 CREATE TABLE IF NOT EXISTS txns(id TEXT PRIMARY KEY, karigar_id INT, job TEXT, type TEXT, category TEXT,
-  gross_mg INT, purity_bp INT, fine_mg INT, final INT DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+  gross_mg INT, purity_bp INT, fine_mg INT, final INT DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, wastage_bp INT);
 CREATE TABLE IF NOT EXISTS audit(at TEXT DEFAULT CURRENT_TIMESTAMP, email TEXT, action TEXT, ref TEXT);
 `);
+try { db.exec('ALTER TABLE txns ADD COLUMN wastage_bp INT'); } catch { /* column already exists */ }
 
 const app = express();
 app.set('trust proxy', 1); // behind the host's proxy, so req.ip is the real visitor
@@ -46,7 +47,8 @@ app.post('/api/login', (req, res) => {
   res.json({ token: jwt.sign({ email: u.email, role: u.role }, SECRET, { expiresIn: '8h' }), role: u.role });
 });
 
-// Per-job summary. allowed = agreed wastage % x fine issued, by item category.
+// Per-job summary. allowed = the wastage % agreed ON THE DAY OF ISSUE x fine issued.
+// The % is stored on each issue entry, so editing the master later never rewrites past jobs.
 function jobs(kid) {
   const rows = db.prepare('SELECT * FROM txns WHERE karigar_id=? ORDER BY rowid').all(kid);
   const m = {};
@@ -54,8 +56,7 @@ function jobs(kid) {
     const j = (m[t.job] ||= { job: t.job, issued: 0, returned: 0, allowed: 0, closed: false });
     if (t.type === 'issue') {
       j.issued += t.fine_mg;
-      const w = db.prepare('SELECT bp FROM wastage WHERE karigar_id=? AND category=?').get(kid, t.category);
-      j.allowed += F.allowedMg(t.fine_mg, w ? w.bp : 0);
+      j.allowed += F.allowedMg(t.fine_mg, t.wastage_bp ?? 0);
     } else { j.returned += t.fine_mg; if (t.final) j.closed = true; }
   }
   return Object.values(m).map((j) => ({ ...j, ...F.jobLoss(j) }));
@@ -65,7 +66,7 @@ function jobs(kid) {
 app.get('/api/karigars', auth('clerk', 'finance'), (req, res) => {
   res.json(db.prepare('SELECT * FROM karigars').all().map((k) => {
     const js = jobs(k.id);
-    return { ...k, wastage: db.prepare('SELECT category, bp FROM wastage WHERE karigar_id=?').all(k.id),
+    return { ...k, wastage: db.prepare('SELECT category, bp FROM wastage WHERE karigar_id=? ORDER BY category').all(k.id),
       balance: js.filter((j) => !j.closed).reduce((a, j) => a + j.outstanding, 0), jobs: js };
   }));
 });
@@ -85,12 +86,14 @@ function record(type) {
       const k = db.prepare('SELECT id FROM karigars WHERE id=?').get(Number(b.karigarId));
       if (!k || !/^[\w-]{1,20}$/.test(b.job || '')) throw new Error('Karigar and job number required');
       const existing = db.prepare('SELECT DISTINCT karigar_id, final FROM txns WHERE job=?').all(b.job);
-      let cat;
+      let cat, wbp = null;
       if (type === 'issue') {
         if (existing.some((r) => r.karigar_id !== k.id)) throw new Error('This job number belongs to another karigar');
         if (existing.some((r) => r.final)) throw new Error('This job is already closed');
         cat = b.category;
-        if (!db.prepare('SELECT 1 x FROM wastage WHERE karigar_id=? AND category=?').get(k.id, cat)) throw new Error('No agreed wastage set for this category');
+        const w = db.prepare('SELECT bp FROM wastage WHERE karigar_id=? AND category=?').get(k.id, cat);
+        if (!w) throw new Error('No agreed wastage set for this category');
+        wbp = w.bp;
       } else {
         if (!existing.some((r) => r.karigar_id === k.id)) throw new Error('No issue found for this job and karigar');
         if (existing.some((r) => r.final)) throw new Error('This job is already closed');
@@ -107,8 +110,8 @@ function record(type) {
         if (fine > cur.outstanding)
           throw new Error(`This would return more fine gold than was issued for this job (balance ${F.fmt(cur.outstanding)} g). Check the weight and purity.`);
       }
-      db.prepare('INSERT INTO txns(id,karigar_id,job,type,category,gross_mg,purity_bp,fine_mg,final) VALUES(?,?,?,?,?,?,?,?,?)')
-        .run(id, k.id, b.job, type, cat, g, p, fine, b.final ? 1 : 0);
+      db.prepare('INSERT INTO txns(id,karigar_id,job,type,category,gross_mg,purity_bp,fine_mg,final,wastage_bp) VALUES(?,?,?,?,?,?,?,?,?,?)')
+        .run(id, k.id, b.job, type, cat, g, p, fine, b.final ? 1 : 0, wbp);
       db.prepare('INSERT INTO audit(email,action,ref) VALUES(?,?,?)').run(req.user.email, type, id);
       const j = jobs(k.id).find((x) => x.job === b.job);
       res.json({ id, fine: F.fmt(fine), job: { outstanding: F.fmt(j.outstanding), allowed: F.fmt(j.allowed), closed: j.closed } });
@@ -153,7 +156,7 @@ function stock() {
 }
 app.get('/api/stock', auth('finance'), (req, res) => {
   const s = stock();
-  res.json({ date: new Date().toISOString().slice(0, 10), vault: F.fmt(s.vault), withKarigars: F.fmt(s.withK), finished: F.fmt(s.finished),
+  res.json({ date: F.todayIst(), vault: F.fmt(s.vault), withKarigars: F.fmt(s.withK), finished: F.fmt(s.finished),
     allowance: F.fmt(s.allowance), beyond: F.fmt(s.beyond), refiner: F.fmt(s.refiner), reconciled: s.reconciled });
 });
 
@@ -161,7 +164,7 @@ const csv = (v) => `"${String(v).replace(/"/g, '""')}"`;
 app.get('/api/stock.csv', auth('finance'), (req, res) => {
   const rows = db.prepare('SELECT t.id,t.created_at,k.name,t.type,t.category,t.job,t.fine_mg FROM txns t JOIN karigars k ON k.id=t.karigar_id ORDER BY t.rowid').all();
   res.type('text/csv').send('Voucher,Date,Party,Type,Category,Narration,FineGold_g\n' +
-    rows.map((r) => [r.id, r.created_at.slice(0, 10), r.name, r.type, r.category, 'Job ' + r.job, F.fmt(r.fine_mg)].map(csv).join(',')).join('\n'));
+    rows.map((r) => [r.id, F.istDate(r.created_at), r.name, r.type, r.category, 'Job ' + r.job, F.fmt(r.fine_mg)].map(csv).join(',')).join('\n'));
 });
 
 // Scale photo reading via any OpenAI-compatible router. Unsure or offline returns null so the clerk types it.
@@ -185,11 +188,15 @@ app.post('/api/read-scale', auth('clerk', 'finance'), async (req, res) => {
 
 require('./oldgold').register(app, db, auth);
 require('./karigar').register(app, db, auth, jobs);
+require('./master').register(app, db, auth);
 
 module.exports = { app, db };
 if (require.main === module) {
   require('./seed')(db, bcrypt);
   require('./oldgold').seed(db);
   require('./karigar').seed(db, bcrypt);
+  // Older issue rows without a stored wastage %: fill from the master once.
+  db.exec(`UPDATE txns SET wastage_bp=(SELECT bp FROM wastage w WHERE w.karigar_id=txns.karigar_id AND w.category=txns.category)
+    WHERE type='issue' AND wastage_bp IS NULL`);
   app.listen(process.env.PORT || 3000, () => console.log('Running on http://localhost:' + (process.env.PORT || 3000)));
 }

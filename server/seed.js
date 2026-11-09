@@ -5,9 +5,16 @@ module.exports = (db, bcrypt) => {
   const pw = bcrypt.hashSync(process.env.DEMO_PASSWORD || 'demo1234', 10);
   db.prepare('INSERT INTO users VALUES(?,?,?)').run('clerk@demo.com', pw, 'clerk');
   db.prepare('INSERT INTO users VALUES(?,?,?)').run('finance@demo.com', pw, 'finance');
-  ['Murugesan S', 'Selvam K', 'Ravi P', 'Karthik M'].forEach((n, i) => {
-    db.prepare('INSERT INTO karigars VALUES(?,?)').run(i + 1, n);
-    [['necklace', 300], ['ring', 250], ['bangle', 280]].forEach(([c, bp]) => db.prepare('INSERT INTO wastage VALUES(?,?,?)').run(i + 1, c, bp));
+  // Agreed wastage differs per karigar (basis points). Categories used by the seed jobs keep their original values.
+  const agreed = {
+    'Murugesan S': { necklace: 300, ring: 250, bangle: 280 },
+    'Selvam K': { necklace: 280, ring: 250, bangle: 300 },
+    'Ravi P': { necklace: 320, ring: 250, bangle: 260 },
+    'Karthik M': { necklace: 310, ring: 240, bangle: 280 },
+  };
+  Object.entries(agreed).forEach(([name, cats], i) => {
+    db.prepare('INSERT INTO karigars VALUES(?,?)').run(i + 1, name);
+    Object.entries(cats).forEach(([c, bp]) => db.prepare('INSERT INTO wastage VALUES(?,?,?)').run(i + 1, c, bp));
   });
   const ins = db.prepare('INSERT INTO txns(id,karigar_id,job,type,category,gross_mg,purity_bp,fine_mg,final) VALUES(?,?,?,?,?,?,?,?,?)');
   const row = (id, k, job, type, cat, gross, final = 0) => ins.run(id, k, job, type, cat, gross, 9160, F.fineMg(gross, 9160), final);
